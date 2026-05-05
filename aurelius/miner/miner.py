@@ -5,6 +5,7 @@ import os
 import signal
 import socket
 import subprocess
+import threading
 import sys
 import time
 from pathlib import Path
@@ -62,7 +63,7 @@ class Miner:
         self._generator_script = Path(__file__).resolve().parents[2] / "scripts" / "generate_miner_scenario_openrouter.py"
         self._generator_model = os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini")
         self._generator_attempts = int(os.getenv("GENERATOR_ATTEMPTS", "4"))
-        self._generator_timeout = float(os.getenv("GENERATOR_TIMEOUT", "45"))
+        self._generator_timeout = float(os.getenv("GENERATOR_TIMEOUT", "120"))
 
         external_ip = self.config.AXON_EXTERNAL_IP
         if external_ip == "auto":
@@ -108,6 +109,12 @@ class Miner:
         nxt = self.config_store.next_with_path()
         if nxt is None:
             logger.warning("No configs available to serve")
+            threading.Thread(
+                target=self._retire_and_replenish,
+                args=(None,),
+                daemon=True,
+                name="retire-replenish-empty",
+            ).start()
             return synapse
         scenario_config, config_path = nxt
 
@@ -121,21 +128,30 @@ class Miner:
         synapse.miner_version = aurelius.__version__
         synapse.miner_protocol_version = PROTOCOL_VERSION
 
-        # Consume-once semantics: remove served config then replenish.
-        self._retire_and_replenish(config_path)
+        logger.info("Serving config '%s' with work_id %s", scenario_config.get("name", "?"), result.work_id[:16])
 
-        logger.debug("Serving config '%s' with work_id %s", scenario_config.get("name", "?"), result.work_id[:16])
+        # Return immediately so the axon can send the response; retire/replenish runs after (non-blocking).
+        threading.Thread(
+            target=self._retire_and_replenish,
+            args=(config_path,),
+            daemon=True,
+            name="retire-replenish",
+        ).start()
+
         return synapse
 
-    def _retire_and_replenish(self, used_path: Path) -> None:
-        """Delete the served config file and generate/store a replacement."""
-        try:
-            used_path.unlink(missing_ok=True)
-            logger.info("Retired served config: %s", used_path.name)
-        except OSError as e:
-            logger.warning("Failed to delete served config %s: %s", used_path.name, e)
-        finally:
-            # Keep in-memory store consistent with disk view.
+    def _retire_and_replenish(self, used_path: Path | None) -> None:
+        """Delete the served config file (if any) and generate/store a replacement."""
+        if used_path is not None:
+            try:
+                used_path.unlink(missing_ok=True)
+                logger.info("Retired served config: %s", used_path.name)
+            except OSError as e:
+                logger.warning("Failed to delete served config %s: %s", used_path.name, e)
+            finally:
+                self.config_store.reload()
+        else:
+            logger.info("Replenishing config store (no served file to retire)")
             self.config_store.reload()
 
         generated = self._generate_new_config_file()
