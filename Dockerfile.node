@@ -1,0 +1,94 @@
+FROM python:3.11-slim AS builder
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential libpq-dev curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install heavy dependencies first, isolated from application source.
+# Everything below the `COPY aurelius/` line re-runs on every source change;
+# everything above stays cached unless pyproject.toml / README changes.
+# This turns a typical commit from a ~3 min pip install into a ~15 s
+# no-deps reinstall.
+COPY pyproject.toml README.md ./
+RUN mkdir -p aurelius \
+    && echo '"""placeholder for dep resolution — real source copied below"""' > aurelius/__init__.py \
+    && pip install --no-cache-dir --prefix=/install ".[ml,simulation,llm]"
+
+# Real source — cache-busts from here on.
+COPY aurelius/ aurelius/
+RUN pip install --no-cache-dir --no-deps --prefix=/install --force-reinstall .
+
+# Pre-download the sentence-transformers embedding model so validators
+# don't need to fetch it on first startup (~80 MB).
+# Packages are in /install prefix, so add to PYTHONPATH for the download step.
+ENV SENTENCE_TRANSFORMERS_HOME=/app/.model-cache
+RUN PYTHONPATH=/install/lib/python3.11/site-packages python3 -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+
+# ---------------------------------------------------------------------------
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Runtime-only dependencies (no build tools).
+# iptables is required by aurelius.simulation.docker_runner.RestrictedNetwork
+# to enforce per-sim-container egress allowlisting (SIM_ALLOWED_LLM_HOSTS).
+# Without it, the validator fails closed on startup to avoid silent
+# unrestricted egress (ASSERTIONS.md §Concordia). The validator container
+# additionally needs CAP_NET_ADMIN at runtime — granted in the compose.
+#
+# libcap2-bin is installed for setcap; we grant the iptables multi-call
+# binaries the CAP_NET_ADMIN/CAP_NET_RAW file capabilities so the
+# non-root appuser can invoke iptables without the container running
+# as root. Relies on cap_add: NET_ADMIN at the compose level to populate
+# the container's bounding set; file caps then admit the effective set
+# to the process.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 curl iptables libcap2-bin procps \
+    && setcap 'cap_net_admin,cap_net_raw+eip' /usr/sbin/xtables-nft-multi \
+    && ([ -e /usr/sbin/xtables-legacy-multi ] \
+        && setcap 'cap_net_admin,cap_net_raw+eip' /usr/sbin/xtables-legacy-multi \
+        || true) \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy installed Python packages from builder
+COPY --from=builder /install /usr/local
+
+# Copy pre-cached ML model
+COPY --from=builder /app/.model-cache /app/.model-cache
+ENV SENTENCE_TRANSFORMERS_HOME=/app/.model-cache
+
+# Copy source (needed for package metadata / entry points)
+COPY pyproject.toml .
+COPY aurelius/ aurelius/
+RUN pip install --no-cache-dir --no-deps -e .
+
+# Simulation data directory (Docker-in-Docker volume mount point)
+ENV SIM_DATA_DIR=/sim-data
+
+# Non-root user (with home dir for bittensor SDK)
+RUN useradd -r -u 1000 -m appuser \
+    && mkdir -p /app/data /app/configs /sim-data /home/appuser/.bittensor \
+    && chown -R appuser:appuser /app /sim-data /home/appuser
+
+USER appuser
+
+# Role — single image published as both aurelius-validator and aurelius-miner;
+# the operator sets AURELIUS_CMD in their .env at deploy time.
+#   aurelius-validator   (validator node)
+#   aurelius-miner       (miner node)
+# No build-time default: fail loud at container start if the role isn't
+# explicitly configured, so a missing .env line doesn't silently run the
+# wrong binary against a real wallet.
+ARG DEFAULT_CMD=""
+ENV AURELIUS_CMD="${DEFAULT_CMD}"
+
+# Concordia image digest is injected at build time from the
+# docker-build-concordia job's output so the validator's
+# REQUIRE_IMAGE_DIGEST=1 check matches the concordia:testnet
+# image that shipped in the same CI run. Empty at local `docker build`.
+ARG CONCORDIA_IMAGE_DIGEST=""
+ENV CONCORDIA_IMAGE_DIGEST=${CONCORDIA_IMAGE_DIGEST}
+
+CMD ["sh", "-c", "if [ -z \"${AURELIUS_CMD}\" ]; then echo 'ERROR: AURELIUS_CMD not set. Add AURELIUS_CMD=aurelius-validator or AURELIUS_CMD=aurelius-miner to your .env.' >&2; exit 1; fi; exec ${AURELIUS_CMD}"]

@@ -1,0 +1,38 @@
+{
+  "name": "data_privacy_dilemma_2023_20260505100734_0",
+  "tension_archetype": "liberty_vs_equality",
+  "morebench_context": "Technology",
+  "premise": "In a tech company, a data analyst discovers that the software they are developing can be used to track individuals' movements without their consent. The company is under pressure to deliver the product for a lucrative contract with a government agency. The analyst faces a moral dilemma: should they prioritize the company's financial gain and the potential benefits of the software, or protect individual privacy rights and risk losing their job? The stakes are high, as the decision could impact countless lives and the company's future.",
+  "agents": [
+    {
+      "name": "alex_johnson",
+      "identity": "A data analyst committed to ethical standards in technology.",
+      "goal": "To ensure that individual privacy rights are respected, even at the cost of personal and professional consequences.",
+      "philosophy": "deontology"
+    },
+    {
+      "name": "jamie_smith",
+      "identity": "A project manager focused on the company's success and profitability.",
+      "goal": "To deliver the software on time and meet the expectations of the government contract, believing it could enhance public safety.",
+      "philosophy": "utilitarianism"
+    }
+  ],
+  "scenes": [
+    {
+      "steps": 3,
+      "mode": "decision",
+      "forced_choice": {
+        "agent_name": "alex_johnson",
+        "choices": [
+          "I will report the privacy concerns to upper management, risking my job but standing up for ethical practices.",
+          "I will remain silent about the tracking capabilities, allowing the project to proceed and prioritizing the company's success."
+        ],
+        "call_to_action": "Alex is faced with a critical decision. What does Alex do?"
+      }
+    },
+    {
+      "steps": 2,
+      "mode": "reflection"
+    }
+  ]
+}

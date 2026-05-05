@@ -1,0 +1,27 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install Concordia (GDM library: gdm-concordia on PyPI) and OpenAI
+# gdm-concordia 2.x requires Python 3.12+
+# Concordia is a hard requirement — build fails if install fails.
+ENV PIP_NO_BUILD_ISOLATION=1
+RUN pip install --no-cache-dir numpy cython setuptools wheel && \
+    pip install --no-cache-dir openai>=1.0.0 && \
+    pip install --no-cache-dir "gdm-concordia[openai]==2.4.0"
+
+# Copy the consolidated entrypoint and the patched LLM model wrapper.
+# llm_model.py is imported by entrypoint.py; both must live in /app
+# so Python's same-directory import resolves.
+COPY entrypoint.py /app/entrypoint.py
+COPY llm_model.py /app/llm_model.py
+
+# Run as non-root user
+RUN useradd -r -u 1000 appuser && mkdir -p /data && chown appuser:appuser /data
+USER appuser
+
+# No persistent storage — container is ephemeral
+VOLUME /data
+
+# Resource limits enforced by Docker runtime, not Dockerfile
+ENTRYPOINT ["python", "/app/entrypoint.py"]

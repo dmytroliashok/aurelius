@@ -1,0 +1,5 @@
+{
+  "protocol_version": "1.1.0",
+  "expected": "accept",
+  "notes": "A v1.1.0 miner against the v1.1.0 validator — exact match, check_compatibility returns ACCEPT."
+}

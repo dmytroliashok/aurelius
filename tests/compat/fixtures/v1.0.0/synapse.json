@@ -1,0 +1,46 @@
+{
+  "request_id": "compat-seed-v1.0.0",
+  "validator_version": "1.0.0",
+  "protocol_version": "1.0.0",
+  "scenario_config": {
+    "name": "compat_v1_0_0_seed",
+    "tension_archetype": "justice_vs_mercy",
+    "morebench_context": "Healthcare",
+    "premise": "A surgeon in a rural hospital faces two critically ill patients and only enough medication for one. The hospital policy is strict first-come-first-served, but the second-arrival is a child with a reversible condition; the first is an elderly community elder whose illness is also treatable but less urgent. The community is watching, the policy is visible, and whichever decision is made will set a precedent that ripples through every similar case for years.",
+    "agents": [
+      {
+        "name": "Dr. Chen",
+        "identity": "I am a surgeon with twenty years of trauma experience and a deep respect for hospital protocol.",
+        "goal": "I want to save the most lives while upholding the hospital's stated rules.",
+        "philosophy": "deontology"
+      },
+      {
+        "name": "Nurse Patel",
+        "identity": "I am a senior nurse who has seen what happens when rules are bent quietly.",
+        "goal": "I want to protect vulnerable patients, especially children.",
+        "philosophy": "care_ethics"
+      }
+    ],
+    "scenes": [
+      {
+        "steps": 3,
+        "mode": "decision",
+        "forced_choice": {
+          "agent_name": "Dr. Chen",
+          "choices": [
+            "I prioritize the child despite the policy.",
+            "I follow the first-come-first-served protocol."
+          ],
+          "call_to_action": "The medication can only save one patient. What does Dr. Chen do?"
+        }
+      },
+      {"steps": 2, "mode": "reflection"}
+    ]
+  },
+  "work_id": "0000000000000000000000000000000000000000000000000000000000000000",
+  "work_id_nonce": "00000000000000000000000000000000",
+  "work_id_time_ns": "1700000000000000000",
+  "work_id_signature": "00",
+  "miner_version": "1.0.0",
+  "miner_protocol_version": "1.0.0"
+}

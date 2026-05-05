@@ -1,0 +1,5 @@
+{
+  "protocol_version": "1.0.0",
+  "expected": "warn",
+  "notes": "A v1.0.0 miner against the current v1.1.0 validator: same major, different minor — check_compatibility returns WARN, the validator logs and proceeds."
+}
