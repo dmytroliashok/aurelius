@@ -1,0 +1,4 @@
+[console_scripts]
+aurelius-deposit = aurelius.cli.deposit:main
+aurelius-miner = aurelius.miner.miner:main
+aurelius-validator = aurelius.validator.validator:main
