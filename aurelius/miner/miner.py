@@ -1,7 +1,6 @@
 import concurrent.futures
 import json
 import logging
-import os
 import signal
 import socket
 import subprocess
@@ -61,9 +60,9 @@ class Miner:
         self.config_store = ConfigStore(config_dir)
         logger.info("Config store: %d configs loaded from %s", self.config_store.count, config_dir)
         self._generator_script = Path(__file__).resolve().parents[2] / "scripts" / "generate_miner_scenario_openrouter.py"
-        self._generator_model = os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini")
-        self._generator_attempts = int(os.getenv("GENERATOR_ATTEMPTS", "4"))
-        self._generator_timeout = float(os.getenv("GENERATOR_TIMEOUT", "120"))
+        self._generator_model = self.config.OPENROUTER_MODEL
+        self._generator_attempts = self.config.GENERATOR_ATTEMPTS
+        self._generator_timeout = self.config.GENERATOR_TIMEOUT
 
         external_ip = self.config.AXON_EXTERNAL_IP
         if external_ip == "auto":

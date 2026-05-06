@@ -8,9 +8,10 @@ This script is designed for Aurelius miners:
 - Writes the best candidate into MINER_CONFIG_DIR for ConfigStore consumption.
 
 Usage example:
-  OPENROUTER_API_KEY=... python scripts/generate_miner_scenario_openrouter.py \
-    --model openai/gpt-4.1-mini \
-    --attempts 8
+  OPENROUTER_API_KEY=... OPENROUTER_MODEL=openai/gpt-4.1-mini \\
+    python scripts/generate_miner_scenario_openrouter.py --attempts 8
+
+  Model defaults to $OPENROUTER_MODEL when --model is omitted (else openai/gpt-4o-mini).
 """
 
 from __future__ import annotations
@@ -412,7 +413,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Generate validator-compliant scenario_config using OpenRouter and save to miner config store."
     )
-    parser.add_argument("--model", default=DEFAULT_MODEL, help="OpenRouter model slug, e.g. openai/gpt-4.1-mini")
+    parser.add_argument(
+        "--model",
+        default=os.getenv("OPENROUTER_MODEL", DEFAULT_MODEL),
+        help="OpenRouter model slug (default: OPENROUTER_MODEL env or %s)" % DEFAULT_MODEL,
+    )
     parser.add_argument("--attempts", type=int, default=8, help="Number of generation attempts to rank candidates")
     parser.add_argument("--timeout", type=float, default=60.0, help="HTTP timeout per OpenRouter request (seconds)")
     parser.add_argument("--archetype", default=None, help="Optional fixed tension_archetype value")

@@ -77,7 +77,10 @@ _COMMON = {
     "QUEUE_MAX_SIZE": "500",
     "QUEUE_MAX_FILE_SIZE_MB": "50",
     "QUEUE_MAX_AGE_SECONDS": "12960",
-    # Miner
+    # Miner — OpenRouter scenario replenishment (generate_miner_scenario_openrouter.py)
+    "OPENROUTER_MODEL": "openai/gpt-4o-mini",
+    "GENERATOR_ATTEMPTS": "4",
+    "GENERATOR_TIMEOUT": "120",
     "METAGRAPH_SYNC_INTERVAL": "60",
     # HTTP client
     "API_TIMEOUT": "30",
@@ -228,7 +231,11 @@ class LocalConfig:
     QUEUE_MAX_FILE_SIZE_MB: int = int(_get("QUEUE_MAX_FILE_SIZE_MB"))
     QUEUE_MAX_AGE_SECONDS: int = int(_get("QUEUE_MAX_AGE_SECONDS"))
 
-    # Miner
+    # Miner — OpenRouter-backed scenario JSON replenishment
+    OPENROUTER_MODEL: str = _get("OPENROUTER_MODEL", "openai/gpt-4o-mini")
+    GENERATOR_ATTEMPTS: int = int(_get("GENERATOR_ATTEMPTS", "4"))
+    GENERATOR_TIMEOUT: float = float(_get("GENERATOR_TIMEOUT", "120"))
+
     METAGRAPH_SYNC_INTERVAL: int = int(_get("METAGRAPH_SYNC_INTERVAL"))
 
     # HTTP client
