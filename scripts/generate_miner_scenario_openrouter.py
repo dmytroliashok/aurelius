@@ -44,6 +44,10 @@ from aurelius.config import Config
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_MODEL = "openai/gpt-4o-mini"
 
+# Random default for `morebench_context` when `--context` is omitted (must each be ≤100 chars).
+# Validator novelty compares embeddings of premise, tension, agents, and forced choices—not this
+# label alone—but specific domains reduce templated repetition and steer diverse substantive setups
+# that score better on classifier + coherence (concrete stakes, distinct institutions).
 MOREBENCH_CONTEXTS = [
     "Healthcare",
     "Education",
