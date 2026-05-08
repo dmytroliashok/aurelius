@@ -105,16 +105,69 @@ class Miner:
             logger.debug("Could not fetch deposit address banner: %s", e)
 
     def forward(self, synapse: ScenarioConfigSynapse) -> ScenarioConfigSynapse:
+        timeout = synapse.timeout
+        logger.info("==============> New synapse request, timeout: %s seconds", timeout)
+        start_time = time.time()
         nxt = self.config_store.next_with_path()
         if nxt is None:
-            logger.warning("No configs available to serve")
+            logger.info(
+                "No configs in store — generating two scenarios (serve one, keep one on disk)"
+            )
+            path_serve = self._generate_new_config_file()
+            path_reserve = self._generate_new_config_file()
+            if path_serve is None:
+                threading.Thread(
+                    target=self._retire_and_replenish,
+                    args=(None,),
+                    daemon=True,
+                    name="retire-replenish-empty",
+                ).start()
+                return synapse
+            try:
+                scenario_config = json.loads(path_serve.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as e:
+                logger.warning("Failed to read generated serve config %s: %s", path_serve.name, e)
+                threading.Thread(
+                    target=self._retire_and_replenish,
+                    args=(None,),
+                    daemon=True,
+                    name="retire-replenish-empty",
+                ).start()
+                return synapse
+
+            result = generate_work_id(scenario_config, self.wallet.hotkey.ss58_address, wallet=self.wallet)
+
+            synapse.scenario_config = scenario_config
+            synapse.work_id = result.work_id
+            synapse.work_id_nonce = result.nonce
+            synapse.work_id_time_ns = result.time_ns
+            synapse.work_id_signature = result.signature
+            synapse.miner_version = aurelius.__version__
+            synapse.miner_protocol_version = PROTOCOL_VERSION
+
+            logger.info(
+                "==============> Serving freshly generated '%s' with work_id %s",
+                scenario_config.get("name", "?"),
+                result.work_id[:16],
+            )
+            if path_reserve is not None:
+                logger.info("==============> Stored reserve scenario on disk: %s", path_reserve.name)
+            else:
+                logger.warning(
+                    "==============> Second scenario generation failed — store may stay sparse until replenish"
+                )
+
             threading.Thread(
-                target=self._retire_and_replenish,
-                args=(None,),
+                target=self._retire_served_only_reload,
+                args=(path_serve,),
                 daemon=True,
-                name="retire-replenish-empty",
+                name="retire-served-double-gen",
             ).start()
+
+            end_time = time.time()
+            logger.info("==============> Miner response time: %s seconds", end_time - start_time)
             return synapse
+
         scenario_config, config_path = nxt
 
         result = generate_work_id(scenario_config, self.wallet.hotkey.ss58_address, wallet=self.wallet)
@@ -127,7 +180,7 @@ class Miner:
         synapse.miner_version = aurelius.__version__
         synapse.miner_protocol_version = PROTOCOL_VERSION
 
-        logger.info("Serving config '%s' with work_id %s", scenario_config.get("name", "?"), result.work_id[:16])
+        logger.info("==============> Serving config '%s' with work_id %s", scenario_config.get("name", "?"), result.work_id[:16])
 
         # Return immediately so the axon can send the response; retire/replenish runs after (non-blocking).
         threading.Thread(
@@ -137,6 +190,8 @@ class Miner:
             name="retire-replenish",
         ).start()
 
+        end_time = time.time()
+        logger.info("==============> Miner response time: %s seconds", end_time - start_time)
         return synapse
 
     def _retire_and_replenish(self, used_path: Path | None) -> None:
@@ -157,13 +212,23 @@ class Miner:
         if generated is not None:
             self.config_store.reload()
 
+    def _retire_served_only_reload(self, served_path: Path | None) -> None:
+        """Remove the served file only and reload the store — no extra generator run."""
+        if served_path is not None:
+            try:
+                served_path.unlink(missing_ok=True)
+                logger.info("Retired served config (inline generation path): %s", served_path.name)
+            except OSError as e:
+                logger.warning("Failed to delete served config %s: %s", served_path.name, e)
+        self.config_store.reload()
+
     def _generate_new_config_file(self) -> Path | None:
         """Call generator script to create one new config JSON file."""
         if not self._generator_script.exists():
             logger.warning("Generator script missing, cannot replenish: %s", self._generator_script)
             return None
 
-        out_file = Path(self.config.MINER_CONFIG_DIR) / f"autogen_{int(time.time())}.json"
+        out_file = Path(self.config.MINER_CONFIG_DIR) / f"autogen_{time.time_ns()}.json"
         cmd = [
             sys.executable,
             str(self._generator_script),

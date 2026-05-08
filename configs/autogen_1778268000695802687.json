@@ -1,0 +1,38 @@
+{
+  "name": "corporate_loyalty_dilemma_2023_20260508192009_0",
+  "tension_archetype": "truth_vs_loyalty",
+  "morebench_context": "Business Ethics",
+  "premise": "In a competitive tech company, Sarah discovers that her manager, Tom, has been inflating project results to secure a promotion. This deception could harm the company's reputation and mislead stakeholders. Sarah is torn; she values honesty and integrity but also feels a strong loyalty to her team and manager, who has supported her career. The deadline for reporting is imminent, and if she reports Tom, it could lead to his dismissal and a rift in their working relationship. However, staying silent means complicity in the deceit, risking her own ethical standards and the company's future. The stakes are high, and Sarah must decide how to act.",
+  "agents": [
+    {
+      "name": "sarah",
+      "identity": "I am a project lead at a tech company, dedicated to fostering innovation and integrity within my team. I believe in transparency and ethical practices, which I see as essential for long-term success.",
+      "goal": "I want to ensure that our projects are represented honestly, even if it means confronting someone I respect. Upholding ethical standards is crucial for my personal integrity and the company's reputation.",
+      "philosophy": "deontology"
+    },
+    {
+      "name": "tom",
+      "identity": "I am the manager at a tech firm, focused on achieving results and advancing my career. I believe that sometimes, bending the truth is necessary to succeed in a competitive environment.",
+      "goal": "I want to secure my promotion and ensure my team's success, even if it means taking risks with the truth. I feel that the ends justify the means in this fast-paced industry.",
+      "philosophy": "utilitarianism"
+    }
+  ],
+  "scenes": [
+    {
+      "steps": 3,
+      "mode": "decision",
+      "forced_choice": {
+        "agent_name": "sarah",
+        "choices": [
+          "I will report Tom's actions to upper management, believing that honesty is paramount, even if it costs him his job.",
+          "I will confront Tom privately about his actions, urging him to come clean himself, prioritizing loyalty to my team over the truth."
+        ],
+        "call_to_action": "What does sarah do?"
+      }
+    },
+    {
+      "steps": 2,
+      "mode": "reflection"
+    }
+  ]
+}
