@@ -23,7 +23,7 @@ import random
 import re
 import sys
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -392,7 +392,7 @@ def _output_path(config_dir: Path, explicit_output: str | None, scenario_name: s
         if path.suffix != ".json":
             path = path.with_suffix(".json")
         return path
-    ts = datetime.now(tz=UTC).strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
     return config_dir / f"{scenario_name}_{ts}.json"
 
 
@@ -485,7 +485,7 @@ def main() -> int:
 
         # Ensure choices can be served repeatedly without duplicate-key novelty collisions.
         name = str(config.get("name", "scenario"))
-        suffix = datetime.now(tz=UTC).strftime("%Y%m%d%H%M%S")
+        suffix = datetime.now(tz=timezone.utc).strftime("%Y%m%d%H%M%S")
         config["name"] = f"{name[:48]}_{suffix}_{i}"
 
         # Encourage philosophies to stay in enum; fill missing with empty string.
