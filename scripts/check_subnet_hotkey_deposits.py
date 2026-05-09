@@ -1,14 +1,27 @@
 #!/usr/bin/env python3
-"""Scan local wallet hotkeys and check aurelius-deposit balance for those registered on a subnet."""
+"""Scan local wallet hotkeys and check aurelius-deposit balance for those registered on a subnet.
+
+Resolves Central API URL for `aurelius-deposit` in this order:
+  1. ``--api-url``
+  2. Environment ``CENTRAL_API_URL`` or ``AURELIUS_API_URL`` (non-empty)
+  3. ``aurelius.config.Config.CENTRAL_API_URL`` (after ``load_dotenv()`` — uses ``ENVIRONMENT``
+     profile, e.g. ``mainnet`` → production collector URL)
+
+Without ``--api-url`` or a profile pointing off localhost, balance checks hit ``localhost:8000``
+and fail unless the Central API runs locally.
+"""
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shlex
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Dict, List, Set, Tuple
 
@@ -81,8 +94,42 @@ def fetch_registered_hotkeys_sdk(
     return out
 
 
-def run_deposit_balance(deposit_cmd: str, hotkey: str) -> Tuple[int, str, str]:
-    cmd = shlex.split(deposit_cmd) + ["balance", "--hotkey", hotkey]
+def resolve_central_api_url(cli_api_url: str | None) -> str:
+    """Pick Central API base URL for ``aurelius-deposit --api-url``."""
+    if cli_api_url and cli_api_url.strip():
+        return cli_api_url.strip().rstrip("/")
+    for key in ("CENTRAL_API_URL", "AURELIUS_API_URL"):
+        v = os.environ.get(key, "").strip()
+        if v:
+            return v.rstrip("/")
+    try:
+        from aurelius.config import Config
+
+        u = (Config.CENTRAL_API_URL or "").strip()
+        if u:
+            return u.rstrip("/")
+    except Exception:
+        pass
+    return ""
+
+
+def central_api_health_ok(api_url: str, timeout_sec: float = 8.0) -> bool:
+    base = api_url.rstrip("/")
+    health = f"{base}/health"
+    try:
+        with urllib.request.urlopen(health, timeout=timeout_sec) as resp:
+            return 200 <= getattr(resp, "status", 200) < 500
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return False
+
+
+def build_deposit_balance_argv(deposit_cmd: str, api_url: str, hotkey: str) -> List[str]:
+    """``aurelius-deposit --api-url … balance --hotkey …`` (global flags before subcommand)."""
+    return shlex.split(deposit_cmd) + ["--api-url", api_url, "balance", "--hotkey", hotkey]
+
+
+def run_deposit_balance(deposit_cmd: str, api_url: str, hotkey: str) -> Tuple[int, str, str]:
+    cmd = build_deposit_balance_argv(deposit_cmd, api_url, hotkey)
     cp = subprocess.run(cmd, text=True, capture_output=True)
     return cp.returncode, cp.stdout, cp.stderr
 
@@ -113,6 +160,20 @@ def main() -> int:
         help="aurelius-deposit executable/command prefix (default: aurelius-deposit)",
     )
     parser.add_argument(
+        "--api-url",
+        default=os.environ.get("CENTRAL_API_URL") or os.environ.get("AURELIUS_API_URL") or None,
+        metavar="URL",
+        help=(
+            "Central API base URL passed to aurelius-deposit (default: CENTRAL_API_URL or "
+            "AURELIUS_API_URL env, else aurelius.config from .env / ENVIRONMENT profile)"
+        ),
+    )
+    parser.add_argument(
+        "--skip-api-health-check",
+        action="store_true",
+        help="Do not probe GET /health before running balance checks",
+    )
+    parser.add_argument(
         "--registered-hotkeys-file",
         help="Optional text file with one registered ss58 hotkey per line (skips metagraph fetch)",
     )
@@ -122,6 +183,16 @@ def main() -> int:
         help="Print local hotkeys not registered on target subnet",
     )
     args = parser.parse_args()
+
+    api_url = resolve_central_api_url(args.api_url)
+    if not api_url:
+        print(
+            "[error] Central API URL is empty. Set CENTRAL_API_URL or AURELIUS_API_URL, "
+            "use --api-url, or run from a directory whose .env sets ENVIRONMENT=mainnet "
+            "(or testnet) so aurelius.config resolves a non-local collector URL.",
+            file=sys.stderr,
+        )
+        return 1
 
     wallets_dir = Path(args.wallets_dir)
     if not wallets_dir.exists():
@@ -152,6 +223,24 @@ def main() -> int:
 
     print(f"[info] local hotkeys found: {len(local_set)}")
     print(f"[info] registered on netuid {args.netuid}: {len(targets)}")
+    print(f"[info] Central API: {api_url}")
+
+    if "localhost" in api_url or api_url.startswith("127."):
+        print(
+            "[warn] Using loopback Central API. For Finney/mainnet deposits use ENVIRONMENT=mainnet "
+            "in .env or pass --api-url https://new-collector-api-production.up.railway.app",
+            file=sys.stderr,
+        )
+
+    if not args.skip_api_health_check:
+        if not central_api_health_ok(api_url):
+            print(
+                f"[error] Central API not reachable at {api_url}/health "
+                "(connection refused or timeout). Fix --api-url / CENTRAL_API_URL, start the API, "
+                "or pass --skip-api-health-check to try anyway.",
+                file=sys.stderr,
+            )
+            return 4
 
     if args.show_not_registered and not_registered:
         print("\n[not-registered-local-hotkeys]")
@@ -167,7 +256,7 @@ def main() -> int:
     for idx, hk in enumerate(targets, 1):
         labels = ", ".join(local_hotkeys[hk])
         print(f"\n[{idx}/{len(targets)}] hotkey={hk} labels={labels}")
-        code, stdout, stderr = run_deposit_balance(args.deposit_cmd, hk)
+        code, stdout, stderr = run_deposit_balance(args.deposit_cmd, api_url, hk)
         if stdout.strip():
             print(stdout.strip())
         if code != 0:
